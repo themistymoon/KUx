@@ -25,11 +25,13 @@ KUx is a retrieval-augmented, Kasetsart University–focused assistant built on 
 1. **Provision the runtime** – open a fresh Colab notebook, switch the hardware accelerator to **GPU (A100 80GB)**, and optionally enable High-RAM.
 2. **Clone and install:**
    ```bash
-   !git clone https://github.com/themistymoon/KUx.git
+   !git clone https://github.com/<your-account>/KUx.git
    %cd KUx
    !pip install -U pip
    !pip install -r requirements.txt
+   !pip install -e .
    ```
+   Installing KUx in editable mode ensures the `kux` Python package is on the path so all scripts run without additional `PYTHONPATH` tweaks.
    > **Multimodal note:** Qwen3-Omni’s audio, image, and video interfaces rely on the bleeding-edge Transformers implementation.
    > After installing the base requirements, upgrade to the latest nightly build if Colab ships an older version:
    > `pip install -U "transformers@git+https://github.com/huggingface/transformers"`

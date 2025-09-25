@@ -18,7 +18,9 @@ This walkthrough shows how to bootstrap KUx on a **Google Colab Pro+** runtime w
 %cd KUx
 !pip install -U pip
 !pip install -r requirements.txt
+!pip install -e .
 ```
+> The editable install registers the `kux` package on `PYTHONPATH`, allowing `python scripts/*.py` commands to import the project modules without extra setup.
 
 > **Persisting artefacts:** Mount Google Drive early in the notebook to keep trained adapters (`outputs/`) and FAISS indexes (`storage/`) between sessions:
 > `from google.colab import drive; drive.mount('/content/drive')`
