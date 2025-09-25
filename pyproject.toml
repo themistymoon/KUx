@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kux"
+version = "0.1.0"
+description = "Kasetsart University multimodal assistant with RAG and Qwen3-Omni integration"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "KUx Team"}]
+requires-python = ">=3.10"
+keywords = ["kasetsart", "rag", "qwen", "multimodal", "assistant"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
