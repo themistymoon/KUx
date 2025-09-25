@@ -1,141 +1,188 @@
-# Google Colab Pro+ deployment guide
+# Google Colab Pro+ notebook walkthrough
 
-This walkthrough shows how to bootstrap KUx on a **Google Colab Pro+** runtime with an **A100 80GB** GPU. The same steps also work on other high-memory accelerators, but the LoRA recipe and quantisation defaults have been tuned for the Colab Pro+ offering.
+This guide mirrors the bundled [docs/KUx_Colab_End_to_End.ipynb](KUx_Colab_End_to_End.ipynb), which now consolidates every KUx workflow step into a single notebook. Adjust the configuration cell once, then execute the remaining sections sequentially to prepare data, rebuild the RAG store, optionally fine-tune Qwen3-Omni, and launch the multimodal chatbot without leaving Colab.
 
-## 0. Start from a clean notebook
+## 0. Adjust the master configuration cell
 
-1. Create a new Colab notebook → **Runtime ▸ Change runtime type** → set **Hardware accelerator** to **GPU** (A100 80GB).
-2. (Optional) Enable **High-RAM** runtimes if available to comfortably cache the vector store and crawler output.
-
-## 1. Environment preparation
+The first executable cell defines all runtime switches—repository location, crawl settings, ingestion sources, fine-tuning options, and chatbot defaults. Update it before proceeding so the subsequent cells honour your choices.
 
 ```python
-# Inspect the GPU to confirm you received an A100 80GB device
-!nvidia-smi
+CONFIG = {
+    "repo_url": "https://github.com/<your-account>/KUx.git",
+    "repo_dir": "/content/KUx",
+    "enable_crawl": False,
+    "crawl_seed_urls": [
+        "https://cs.sci.ku.ac.th/",
+    ],
+    "crawl_max_depth": 1,
+    "crawl_max_pages": 10,
+    "enable_ingest": True,
+    "ingest_sources": [
+        "data/sample_documents",
+        "data/crawled",
+    ],
+    "enable_finetune": False,
+    "finetune_dataset": "data/train.jsonl",
+    "finetune_epochs": 2,
+    "default_model_key": "qwen3-omni-30b",
+    "default_system_prompt": "",
+    "launch_share": True,
+    "launch_preload": True,
+    "vector_db_dir": "storage/vectorstore",
+    "adapter_dir": "outputs/finetuned-qwen",
+}
+```
 
-# Pull the project and install dependencies
-!git clone https://github.com/<your-account>/KUx.git
-%cd KUx
+## 1. Provision the runtime GPU
+
+Set the notebook to **GPU ▸ A100 80 GB** (plus High-RAM if desired), then run `!nvidia-smi` to confirm Colab attached the correct accelerator.
+
+## 2. Clone the repository (idempotent)
+
+The clone cell reads `CONFIG["repo_url"]` and `CONFIG["repo_dir"]`, only cloning when the target directory does not exist:
+
+```python
+from pathlib import Path
+from IPython import get_ipython
+
+REPO_URL = CONFIG["repo_url"]
+TARGET_DIR = Path(CONFIG["repo_dir"])
+
+if not TARGET_DIR.exists():
+    TARGET_DIR.parent.mkdir(parents=True, exist_ok=True)
+    !git clone {REPO_URL} {TARGET_DIR}
+
+get_ipython().run_line_magic('cd', str(TARGET_DIR))
+print('Working directory:', Path.cwd())
+```
+
+## 3. Install dependencies
+
+```python
 !pip install -U pip
 !pip install -r requirements.txt
-!pip install -e .
 ```
-> The editable install registers the `kux` package on `PYTHONPATH`, allowing `python scripts/*.py` commands to import the project modules without extra setup.
 
-> **Persisting artefacts:** Mount Google Drive early in the notebook to keep trained adapters (`outputs/`) and FAISS indexes (`storage/`) between sessions:
-> `from google.colab import drive; drive.mount('/content/drive')`
+Editable installs are no longer required—the notebook defines all helpers inline.
 
-> **Transformer nightly (for multimodal I/O):** Qwen3-Omni’s audio/video tooling lives on the latest Transformers main branch.
-> After installing the base requirements, run `pip install -U "transformers@git+https://github.com/huggingface/transformers"`
-> to ensure the multimodal loaders are available.
+> **Optional integrations**
+>
+> ```python
+> # Hugging Face authentication if the Qwen model is gated
+> from huggingface_hub import notebook_login
+> notebook_login()
+>
+> # Persist artefacts to Google Drive
+> from google.colab import drive
+> drive.mount('/content/drive')
+> ```
 
-If you rely on gated Hugging Face models, authenticate once per session:
+## 4. Configure working directories
+
+This cell ensures the data, vector store, and adapter folders exist and writes their resolved paths back into `CONFIG` for later steps.
 
 ```python
-from huggingface_hub import notebook_login
-notebook_login()  # prompts for your HF token
+from pathlib import Path
+
+PROJECT_ROOT = Path.cwd()
+DATA_DIR = PROJECT_ROOT / 'data'
+VECTOR_DB_DIR = PROJECT_ROOT / CONFIG['vector_db_dir']
+ADAPTER_DIR = PROJECT_ROOT / CONFIG['adapter_dir']
+
+for path in (DATA_DIR, VECTOR_DB_DIR, ADAPTER_DIR):
+    path.mkdir(parents=True, exist_ok=True)
+
+CONFIG['project_root'] = str(PROJECT_ROOT)
+CONFIG['data_dir'] = str(DATA_DIR)
+CONFIG['vector_db_dir'] = str(VECTOR_DB_DIR)
+CONFIG['adapter_dir'] = str(ADAPTER_DIR)
 ```
 
-## 2. Prepare training data
+A quick listing cell displays the bundled `data/sample_documents/` so you can verify the starter files.
 
-Create or upload a supervision file at `data/train.jsonl`. Each line must be a JSON object in one of the supported formats:
+## 5. Expand the inline KUx core logic
 
-```json
-{"messages": [
-  {"role": "system", "content": "You are KUx, an assistant for Kasetsart CS students."},
-  {"role": "user", "content": "<student question>"},
-  {"role": "assistant", "content": "<grounded answer>"}
-]}
+Before you run the crawl/ingest/fine-tune/chatbot sections, execute the notebook cell labelled **“KUx core logic within this notebook.”** It defines:
+
+- Configuration dataclasses (`ModelOption`, `RAGConfig`, `TrainConfig`, `CrawlerConfig`).
+- `SiteCrawler` for domain-restricted crawling.
+- `DocumentIngestor` for building a FAISS vector store.
+- `MediaInput`, `RAGPipeline`, and multimodal Qwen generator helpers.
+- `SupervisedFineTuner` for LoRA training.
+- `launch` for the Gradio Blocks chatbot UI.
+
+All later cells assume these definitions are in memory.
+
+## 6. Crawl Kasetsart CS sources (optional)
+
+Enable crawling by setting `CONFIG["enable_crawl"] = True`. The notebook keeps the rest of the code unchanged:
+
+```python
+if CONFIG['enable_crawl']:
+    crawl_seed_urls = CONFIG['crawl_seed_urls']
+    if not crawl_seed_urls:
+        raise ValueError('No seed URLs specified. Update CONFIG["crawl_seed_urls"].')
+
+    crawler_config = CrawlerConfig(
+        max_depth=CONFIG.get('crawl_max_depth', 1),
+        max_pages=CONFIG.get('crawl_max_pages', 10),
+        cache_dir=DATA_DIR / 'crawled_cache',
+    )
+    crawler = SiteCrawler(crawler_config)
+    crawled = crawler.crawl(crawl_seed_urls)
+    output_dir = DATA_DIR / 'crawled'
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, (url, text) in enumerate(crawled.items(), start=1):
+        target = output_dir / f'page_{idx:03d}.txt'
+        target.write_text(text, encoding='utf-8')
+        print(f'Saved {target.relative_to(PROJECT_ROOT)} ← {url}')
+else:
+    print('Skipping crawl (CONFIG["enable_crawl"] is False).')
 ```
 
-or
+## 7. Build or refresh the FAISS vector store
 
-```json
-{"instruction": "<prompt>", "input": "<optional context>", "response": "<answer>"}
+```python
+if CONFIG['enable_ingest']:
+    ingest_config = RAGConfig(vector_db_path=VECTOR_DB_DIR)
+    ingestor = DocumentIngestor(ingest_config)
+    sources = [str((PROJECT_ROOT / path)) for path in CONFIG['ingest_sources']]
+    vector_store = ingestor.ingest(sources)
+    print('Vector store ready:', VECTOR_DB_DIR)
+else:
+    print('Skipping ingestion (CONFIG["enable_ingest"] is False).')
 ```
 
-Keep prompts and answers anchored to **Kasetsart University Computer Science** knowledge so that fine-tuning reinforces the programme’s guidelines.
+## 8. Optional: fine-tune Qwen with LoRA adapters
 
-## 3. Collect official references (optional but recommended)
-
-Fetch up-to-date announcements, course descriptions, or curriculum details from approved Kasetsart domains:
-
-```bash
-!python scripts/crawl_sites.py https://www.cs.ku.ac.th \
-    --output data/crawled \
-    --max-depth 1 \
-    --max-pages 10
+```python
+if CONFIG['enable_finetune']:
+    train_config = TrainConfig(
+        dataset_path=CONFIG['finetune_dataset'],
+        num_train_epochs=CONFIG.get('finetune_epochs', 2),
+        output_dir=str(ADAPTER_DIR),
+    )
+    finetuner = SupervisedFineTuner(train_config)
+    finetuner.prepare_datasets()
+    finetuner.train()
+else:
+    print('Skipping fine-tuning (CONFIG["enable_finetune"] is False).')
 ```
 
-Outputs:
+## 9. Launch the multimodal KUx chatbot
 
-- Raw HTML cache → `storage/crawler_cache/`
-- Cleaned plain text → `data/crawled/`
+The final section preloads the requested model, then launches Gradio with the inline `launch` helper.
 
-Feel free to run the crawler on other whitelisted URLs by editing `src/kux/config.py` (`CrawlerConfig.allowed_domains`).
-
-## 4. Ingest PDFs, CSVs, and crawled text
-
-Populate the FAISS vector store that powers the RAG pipeline. You can combine multiple sources in one command:
-
-```bash
-!python scripts/build_vector_store.py \
-    data/crawled \
-    /content/drive/MyDrive/kux_docs/pdfs \
-    /content/drive/MyDrive/kux_docs/csvs \
-    --vector-db storage/vectorstore
+```python
+launch(
+    vector_db_path=str(VECTOR_DB_DIR),
+    adapter_dir=str(ADAPTER_DIR),
+    default_model_key=CONFIG.get('default_model_key', 'qwen3-omni-30b'),
+    default_system_prompt=CONFIG.get('default_system_prompt', ''),
+    share=CONFIG.get('launch_share', True),
+    preload_default=CONFIG.get('launch_preload', True),
+)
 ```
 
-The script recursively scans each path, filters for `.pdf`, `.csv`, `.txt`, and `.md` files, chunks them, and writes the embeddings into `storage/vectorstore/`.
-
-Re-run the ingestion command whenever you add or modify documents. The existing index will be updated in-place.
-
-## 5. Fine-tune Qwen with LoRA adapters
-
-Launch training once the dataset is ready. The defaults in `TrainConfig` are sized for a single A100 80GB GPU, but you can override them through CLI flags:
-
-```bash
-!python scripts/train_qwen.py \
-    --dataset data/train.jsonl \
-    --output-dir outputs/finetuned-qwen \
-    --num-epochs 3 \
-    --learning-rate 2e-4
-```
-
-Training artefacts saved to `outputs/finetuned-qwen/` include:
-
-- `adapter_config.json` and `adapter_model.safetensors` (LoRA weights)
-- `tokenizer.json` plus tokenizer configs
-- `training_args.bin` for reproducibility
-
-Mount Google Drive or download this folder to persist the adapters for later use.
-
-## 6. Launch the Gradio chatbot demo
-
-With the vector store and LoRA adapter available, start the Colab-hosted interface:
-
-```bash
-!python scripts/run_chatbot.py \
-    --vector-db storage/vectorstore \
-    --adapter outputs/finetuned-qwen \
-    --model qwen3-omni-30b \
-    --share
-```
-
-`--vector-db`, `--adapter`, and `--model` are optional. If you omit them, KUx will still load the base multimodal checkpoint
-and answer questions, but responses will not be grounded in Kasetsart documents until the FAISS store and adapters are provided.
-
-Gradio prints both a local URL and a **public share URL**. Open the public link to chat with KUx. The interface now surfaces
-uploaders for images, audio, and video—leave the text box empty if you want KUx to perform OCR, object grounding, speech
-recognition/translation, audio captioning, music analysis, or full audio-visual dialogue/function-call reasoning on the
-attachments. Each response continues to cite retrieved chunks so you can validate accuracy.
-
-If you restart the runtime, rerun sections 1, 4, 5, and 6 (mount Drive first to reuse stored artefacts).
-
-## 7. (Optional) Export for other deployments
-
-- **FAISS index:** `storage/vectorstore/` → copy to your server or object storage.
-- **Adapters:** `outputs/finetuned-qwen/` → load with `peft.PeftModel.from_pretrained` alongside the base Qwen model.
-- **Environment file:** `requirements.txt` ensures reproducible installs outside Colab.
-
-Once exported, you can launch `scripts/run_chatbot.py` on a workstation or cloud VM with the same arguments and bypass Colab entirely.
+Gradio prints both the local and public URLs directly in the output cell—open the share link in a new browser tab to interact with KUx while leaving the launch cell running.

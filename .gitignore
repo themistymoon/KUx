@@ -7,7 +7,9 @@ outputs/
 !outputs/.gitkeep
 storage/
 !storage/.gitkeep
-data/
+data/*
 !data/.gitkeep
+!data/sample_documents/
+!data/sample_documents/**
 .ipynb_checkpoints/
 .env

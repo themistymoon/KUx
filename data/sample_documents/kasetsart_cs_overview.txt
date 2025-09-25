@@ -1,0 +1,6 @@
+Kasetsart University Computer Science Highlights
+=================================================
+- Established within the Faculty of Science to provide foundational and applied CS education.
+- Offers specialisations in data science, software engineering, and intelligent systems.
+- Promotes project-based learning, research internships, and industry collaboration.
+- Advises students to consult official announcements for up-to-date curriculum requirements.

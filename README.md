@@ -1,113 +1,53 @@
 # KUx – Kasetsart CS Multimodal Assistant
 
-KUx is a retrieval-augmented, Kasetsart University–focused assistant built on top of **Qwen3-Omni-30B-A3B-Instruct**. The project provides:
+KUx is a retrieval-augmented, Kasetsart University–focused assistant powered by **Qwen3-Omni-30B-A3B-Instruct**. The project now ships as a single Google Colab notebook that installs dependencies, crawls Kasetsart sources, ingests PDFs/CSVs into FAISS, optionally fine-tunes Qwen with LoRA, and launches a multimodal ChatGPT-style demo that runs comfortably on **Google Colab Pro+ (A100 80 GB)**.
 
-- A LoRA fine-tuning pipeline tailored for custom Kasetsart Computer Science supervision data.
-- Retrieval augmented generation (RAG) over small PDFs (≤ 20 pages), CSVs, and crawler harvested content from approved Kasetsart domains.
-- Utilities to crawl and cache official Kasetsart websites for up-to-date information.
-- A Gradio demo that emulates a chatbot-style experience suitable for deployment on Google Colab Pro+ (A100 80GB).
-
-> **Mission reminder:** KUx must be a trustworthy all-round helper for Kasetsart students, while prioritising correctness for the Computer Science programme. Retrieval sources therefore default to official KU domains and local curated datasets.
+> **Mission reminder:** KUx must be a trustworthy all-round helper for Kasetsart students while guaranteeing correctness for the Computer Science programme. Retrieval sources therefore default to official KU domains and curated local datasets.
 
 ## Repository layout
 
 ```
-├── configs/               # Place optional YAML/JSON configuration overrides here
-├── data/                  # (ignored) Training data, crawled text, and ingested docs
-├── docs/                  # How-to guides
-├── scripts/               # Command line entrypoints for training, RAG and web UI
-├── src/kux/               # Python package with training, RAG, crawling and UI modules
-└── requirements.txt       # Runtime and training dependencies
+├── data/                    # Sample PDFs/CSVs plus a workspace for your own corpora
+├── docs/                    # Colab notebook & detailed walkthrough
+├── requirements.txt         # Runtime/training dependencies for the notebook
+└── .gitignore               # Keeps large artefacts (vector stores, adapters) out of git
 ```
+
+Every piece of project logic lives inside [`docs/KUx_Colab_End_to_End.ipynb`](docs/KUx_Colab_End_to_End.ipynb); you no longer need to install a Python package or import helper modules.
 
 ## Quick start on Google Colab Pro+
 
-1. **Provision the runtime** – open a fresh Colab notebook, switch the hardware accelerator to **GPU (A100 80GB)**, and optionally enable High-RAM.
-2. **Clone and install:**
-   ```bash
-   !git clone https://github.com/<your-account>/KUx.git
-   %cd KUx
-   !pip install -U pip
-   !pip install -r requirements.txt
-   !pip install -e .
-   ```
-   Installing KUx in editable mode ensures the `kux` Python package is on the path so all scripts run without additional `PYTHONPATH` tweaks.
-   > **Multimodal note:** Qwen3-Omni’s audio, image, and video interfaces rely on the bleeding-edge Transformers implementation.
-   > After installing the base requirements, upgrade to the latest nightly build if Colab ships an older version:
-   > `pip install -U "transformers@git+https://github.com/huggingface/transformers"`
-3. **(Optional) Mount Google Drive** to keep the FAISS index and LoRA adapters between sessions:
-   ```python
-   from google.colab import drive
-   drive.mount('/content/drive')
-   ```
-4. **Authenticate with Hugging Face** if your account needs gated access:
-   ```python
-   from huggingface_hub import notebook_login
-   notebook_login()
-   ```
-5. **Upload your supervision dataset** to `data/train.jsonl` using either the chat-format (`messages`) or instruction-format (`instruction`/`response`).
-6. **(Optional) Crawl official KU CS resources** for fresh retrieval data:
-   ```bash
-   !python scripts/crawl_sites.py https://www.cs.ku.ac.th --output data/crawled --max-depth 1 --max-pages 10
-   ```
-7. **Ingest PDFs, CSVs, and crawled text into FAISS:**
-   ```bash
-   !python scripts/build_vector_store.py data/crawled path/to/pdfs path/to/csvs --vector-db storage/vectorstore
-   ```
-8. **Fine-tune Qwen with LoRA adapters:**
-   ```bash
-   !python scripts/train_qwen.py --dataset data/train.jsonl --output-dir outputs/finetuned-qwen
-   ```
-9. **Launch the Gradio chatbot** (public URL printed in the notebook):
-   ```bash
-   !python scripts/run_chatbot.py \
-       --vector-db storage/vectorstore \
-       --adapter outputs/finetuned-qwen \
-       --model qwen3-omni-30b \
-       --system-prompt "You are KUx, a Kasetsart CS assistant." \
-       --share
-   ```
-   `--vector-db` and `--adapter` are optional—if you skip them the assistant will still respond using the base model, but answers will not be grounded until the FAISS store or adapters are available.
-   The UI now exposes uploaders for **images (OCR, object grounding, image math)**, **audio (speech recognition, translation, captioning, music/sound analysis)**, and **video (audio-visual dialogue/function calls)** alongside the text box. Leave the message field blank to ask KUx to analyse the uploaded media directly.
+1. **Open the notebook** – upload or clone the repository in Colab and open [`docs/KUx_Colab_End_to_End.ipynb`](docs/KUx_Colab_End_to_End.ipynb). All steps run from this single file.
+2. **Edit the master `CONFIG` cell** – choose crawl/ingestion/fine-tuning behaviour, adjust source directories, and override chatbot defaults before executing the rest of the notebook.
+3. **Provision the runtime** – set the Colab hardware accelerator to **GPU (A100 80 GB)** and enable High-RAM. The first code cell prints `nvidia-smi` so you can confirm the runtime.
+4. **Install dependencies** – run `!pip install -U pip` followed by `!pip install -r requirements.txt`. No editable install is required because the notebook defines every class and function inline.
+5. **Configure storage paths** – the setup cells create `data/`, `storage/vectorstore/`, and `outputs/` folders inside the repository so crawled pages, FAISS indexes, and LoRA adapters persist for the session.
+6. **Review the inline KUx core logic** – a dedicated section expands the crawler, RAG ingestion utilities, multimodal Qwen pipeline, fine-tuning helper, and Gradio app directly inside the notebook for transparency.
+7. **Populate knowledge sources** – toggle the crawler via `CONFIG["enable_crawl"]` to pull fresh pages from approved KU domains, and drop your own PDFs, CSVs, or Markdown notes inside `data/` (starter files live in `data/sample_documents/`).
+8. **Build the vector store** – execute the ingestion cell (enabled by default). It initialises the inline `DocumentIngestor`, walks each configured source directory, embeds the chunks, and saves the FAISS index to `storage/vectorstore/`.
+9. **Fine-tune Qwen (optional)** – enable `CONFIG["enable_finetune"]` if you have a chat-style dataset (`data/train.jsonl`). The notebook’s `SupervisedFineTuner` cell loads Qwen3-Omni with LoRA and writes adapters to `outputs/`.
+10. **Launch the chatbot** – run the final Serve KUx cell. The inline `launch` helper preloads the requested model (Qwen3-Omni or the text-only fallback) and brings up a Gradio Blocks UI with multimodal uploaders. Gradio prints both the local and public `--share` URLs directly in the output cell so you can open the ChatGPT-style interface.
 
-For a detailed, copy-paste-ready notebook walkthrough (including advanced overrides and export tips) see [docs/COLAB_SETUP.md](docs/COLAB_SETUP.md).
+Each step streams its logs/output inline—no external terminals or scripts required.
 
-## Fine-tuning pipeline
+## Multimodal chatbot controls
 
-`src/kux/fine_tuning/training.py` implements a LoRA fine-tuning workflow using 4-bit quantisation for memory efficiency on a single A100 80GB GPU. Key features include:
+The Gradio interface exposed by the notebook includes:
 
-- Automatic formatting of chat-style or instruction-following datasets into the Qwen chat template.
-- Configurable LoRA rank, dropout, sequence length and logging cadence via `TrainConfig`.
-- Gradient checkpointing and BF16 training for large sequence support.
-- Persisted adapter weights and tokenizer saved under `outputs/finetuned-qwen/` by default.
+- **Model selector** – choose between the multimodal `Qwen3-Omni-30B-A3B-Instruct` and the text-only `gpt-oss-120b`. The selected option determines whether image/audio/video uploaders are active for the next turn.
+- **Fine-tune toggle** – enable or disable LoRA adapters saved in `outputs/`. When disabled, the base model answers using only the retrieved context.
+- **System prompt editor** – customise the assistant’s default instructions (pre-populated with the Kasetsart CS mission prompt).
+- **Media uploaders** – attach images (OCR, object grounding, image math), audio clips (speech recognition, translation, captioning, sound/music analysis), or videos (audio-visual QA/interactions). Leave the text box empty to request pure media analysis.
 
-Adjust hyperparameters by editing `TrainConfig` (see `src/kux/config.py`) or by supplying a JSON config to `scripts/train_qwen.py`.
+The backend keeps Retrieval-Augmented Generation active so that every answer cites supporting passages from the FAISS index. When the vector store is missing, KUx will still respond but clearly note that no grounding evidence was found.
 
-## Retrieval augmented generation (RAG)
+## Sample data bundle
 
-- **Document ingestion:** `DocumentIngestor` (`src/kux/rag/ingest.py`) accepts directories or file paths for PDFs (≤ 20 pages recommended), CSVs, and text files. Documents are chunked with a recursive splitter and embedded with `sentence-transformers/all-MiniLM-L6-v2` by default.
-- **Vector store:** Documents are embedded into a FAISS index stored under `storage/vectorstore/` (configurable). The same index is reused by the chatbot and any downstream tools. If the index is missing at runtime, KUx now falls back to answering with the base model while logging a warning so you can rebuild the store.
-- **Question answering:** `RAGPipeline` (`src/kux/rag/pipeline.py`) retrieves top-k passages and builds Qwen-aligned prompts to guarantee factual grounding. If no supporting passages are found the assistant explicitly states its uncertainty.
+`data/sample_documents/` contains a CSV and text digest of Kasetsart Computer Science highlights. Use them to validate the ingestion flow before adding your own PDFs, syllabi, or scraped pages. The notebook automatically picks up anything placed under `data/` if the extension is supported (`.pdf`, `.csv`, `.txt`, `.md`).
 
-## Focused crawler for KU sources
+## Want to inspect or tweak the logic?
 
-`scripts/crawl_sites.py` uses `SiteCrawler` (`src/kux/crawling/site_crawler.py`) to fetch, cache, and clean HTML from approved Kasetsart domains only. Update `CrawlerConfig.allowed_domains` (in `src/kux/config.py`) to whitelist additional official sources. Crawled pages are exported as UTF-8 `.txt` files ready for ingestion.
-
-## Chatbot demo
-
-The demo (`src/kux/chatbot/app.py`) exposes a KUx-branded Gradio experience with three key capabilities:
-
-- **Model controls:** switch between the multimodal `Qwen3-Omni-30B-A3B-Instruct` and the text-only `gpt-oss-120b`, toggle LoRA adapters, and edit the system prompt inline.
-- **Audio/visual inputs:** upload multiple images, audio clips, or videos in a single turn. KUx handles OCR, object grounding, image-based reasoning, speech recognition/translation/captioning, sound analysis, and audio-visual dialogue/function-call prompts.
-- **Grounded answers:** the back end still performs retrieval against the FAISS index so Qwen cites Kasetsart Computer Science sources even when the conversation starts from a media attachment.
-
-When running inside Colab the `launch()` helper automatically shares a public URL; the same interface works locally or on any GPU workstation.
-
-## Deployment tips
-
-- **Persistent storage:** Mount Google Drive in Colab to persist adapters (`outputs/`) and vector stores (`storage/`).
-- **Serving outside Colab:** Run `python scripts/run_chatbot.py --share` via Gradio sharing or host behind a reverse proxy (e.g., Cloud Run) after exporting the trained adapter and FAISS index.
-- **Updating knowledge:** Re-run the crawler and ingestion scripts whenever new syllabi or announcements are published; the chatbot will use the refreshed vector store without retraining.
+Search for the **“KUx core logic within this notebook”** heading. The following code cells expose the dataclasses, crawler, ingestion utilities, retrieval pipeline, fine-tuning helper, and Gradio app in pure Python so you can modify behaviour directly in Colab without juggling separate modules.
 
 ## License
 
