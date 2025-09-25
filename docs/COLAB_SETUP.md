@@ -20,8 +20,12 @@ This walkthrough shows how to bootstrap KUx on a **Google Colab Pro+** runtime w
 !pip install -r requirements.txt
 ```
 
-> **Persisting artefacts:** Mount Google Drive early in the notebook to keep trained adapters (`outputs/`) and FAISS indexes (`storage/`) between sessions:  
+> **Persisting artefacts:** Mount Google Drive early in the notebook to keep trained adapters (`outputs/`) and FAISS indexes (`storage/`) between sessions:
 > `from google.colab import drive; drive.mount('/content/drive')`
+
+> **Transformer nightly (for multimodal I/O):** Qwen3-Omni’s audio/video tooling lives on the latest Transformers main branch.
+> After installing the base requirements, run `pip install -U "transformers@git+https://github.com/huggingface/transformers"`
+> to ensure the multimodal loaders are available.
 
 If you rely on gated Hugging Face models, authenticate once per session:
 
@@ -109,10 +113,20 @@ Mount Google Drive or download this folder to persist the adapters for later use
 With the vector store and LoRA adapter available, start the Colab-hosted interface:
 
 ```bash
-!python scripts/run_chatbot.py --vector-db storage/vectorstore --adapter outputs/finetuned-qwen
+!python scripts/run_chatbot.py \
+    --vector-db storage/vectorstore \
+    --adapter outputs/finetuned-qwen \
+    --model qwen3-omni-30b \
+    --share
 ```
 
-Gradio prints both a local URL and a **public share URL**. Open the public link to chat with KUx. Each response cites retrieved chunks so you can validate accuracy.
+`--vector-db`, `--adapter`, and `--model` are optional. If you omit them, KUx will still load the base multimodal checkpoint
+and answer questions, but responses will not be grounded in Kasetsart documents until the FAISS store and adapters are provided.
+
+Gradio prints both a local URL and a **public share URL**. Open the public link to chat with KUx. The interface now surfaces
+uploaders for images, audio, and video—leave the text box empty if you want KUx to perform OCR, object grounding, speech
+recognition/translation, audio captioning, music analysis, or full audio-visual dialogue/function-call reasoning on the
+attachments. Each response continues to cite retrieved chunks so you can validate accuracy.
 
 If you restart the runtime, rerun sections 1, 4, 5, and 6 (mount Drive first to reuse stored artefacts).
 

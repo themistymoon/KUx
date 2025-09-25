@@ -25,11 +25,14 @@ KUx is a retrieval-augmented, Kasetsart University–focused assistant built on 
 1. **Provision the runtime** – open a fresh Colab notebook, switch the hardware accelerator to **GPU (A100 80GB)**, and optionally enable High-RAM.
 2. **Clone and install:**
    ```bash
-   !git clone https://github.com/themistymoon/KUx.git 
+   !git clone https://github.com/themistymoon/KUx.git
    %cd KUx
    !pip install -U pip
    !pip install -r requirements.txt
    ```
+   > **Multimodal note:** Qwen3-Omni’s audio, image, and video interfaces rely on the bleeding-edge Transformers implementation.
+   > After installing the base requirements, upgrade to the latest nightly build if Colab ships an older version:
+   > `pip install -U "transformers@git+https://github.com/huggingface/transformers"`
 3. **(Optional) Mount Google Drive** to keep the FAISS index and LoRA adapters between sessions:
    ```python
    from google.colab import drive
@@ -55,8 +58,15 @@ KUx is a retrieval-augmented, Kasetsart University–focused assistant built on 
    ```
 9. **Launch the Gradio chatbot** (public URL printed in the notebook):
    ```bash
-   !python scripts/run_chatbot.py --vector-db storage/vectorstore --adapter outputs/finetuned-qwen
+   !python scripts/run_chatbot.py \
+       --vector-db storage/vectorstore \
+       --adapter outputs/finetuned-qwen \
+       --model qwen3-omni-30b \
+       --system-prompt "You are KUx, a Kasetsart CS assistant." \
+       --share
    ```
+   `--vector-db` and `--adapter` are optional—if you skip them the assistant will still respond using the base model, but answers will not be grounded until the FAISS store or adapters are available.
+   The UI now exposes uploaders for **images (OCR, object grounding, image math)**, **audio (speech recognition, translation, captioning, music/sound analysis)**, and **video (audio-visual dialogue/function calls)** alongside the text box. Leave the message field blank to ask KUx to analyse the uploaded media directly.
 
 For a detailed, copy-paste-ready notebook walkthrough (including advanced overrides and export tips) see [docs/COLAB_SETUP.md](docs/COLAB_SETUP.md).
 
@@ -74,7 +84,7 @@ Adjust hyperparameters by editing `TrainConfig` (see `src/kux/config.py`) or by 
 ## Retrieval augmented generation (RAG)
 
 - **Document ingestion:** `DocumentIngestor` (`src/kux/rag/ingest.py`) accepts directories or file paths for PDFs (≤ 20 pages recommended), CSVs, and text files. Documents are chunked with a recursive splitter and embedded with `sentence-transformers/all-MiniLM-L6-v2` by default.
-- **Vector store:** Documents are embedded into a FAISS index stored under `storage/vectorstore/` (configurable). The same index is reused by the chatbot and any downstream tools.
+- **Vector store:** Documents are embedded into a FAISS index stored under `storage/vectorstore/` (configurable). The same index is reused by the chatbot and any downstream tools. If the index is missing at runtime, KUx now falls back to answering with the base model while logging a warning so you can rebuild the store.
 - **Question answering:** `RAGPipeline` (`src/kux/rag/pipeline.py`) retrieves top-k passages and builds Qwen-aligned prompts to guarantee factual grounding. If no supporting passages are found the assistant explicitly states its uncertainty.
 
 ## Focused crawler for KU sources
@@ -83,7 +93,13 @@ Adjust hyperparameters by editing `TrainConfig` (see `src/kux/config.py`) or by 
 
 ## Chatbot demo
 
-The demo (`src/kux/chatbot/app.py`) exposes a Gradio chat interface styled as a KUx-branded assistant. It lazily initialises the RAG pipeline and streams answers grounded in the FAISS index. When running inside Colab the `launch()` helper automatically shares a public URL.
+The demo (`src/kux/chatbot/app.py`) exposes a KUx-branded Gradio experience with three key capabilities:
+
+- **Model controls:** switch between the multimodal `Qwen3-Omni-30B-A3B-Instruct` and the text-only `gpt-oss-120b`, toggle LoRA adapters, and edit the system prompt inline.
+- **Audio/visual inputs:** upload multiple images, audio clips, or videos in a single turn. KUx handles OCR, object grounding, image-based reasoning, speech recognition/translation/captioning, sound analysis, and audio-visual dialogue/function-call prompts.
+- **Grounded answers:** the back end still performs retrieval against the FAISS index so Qwen cites Kasetsart Computer Science sources even when the conversation starts from a media attachment.
+
+When running inside Colab the `launch()` helper automatically shares a public URL; the same interface works locally or on any GPU workstation.
 
 ## Deployment tips
 

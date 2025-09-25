@@ -6,6 +6,16 @@ from pathlib import Path
 from typing import List, Optional
 
 
+@dataclass(frozen=True)
+class ModelOption:
+    """Definition for a selectable base model in the chatbot UI."""
+
+    key: str
+    label: str
+    model_name: str
+    multimodal: bool = False
+
+
 @dataclass
 class TrainConfig:
     """Configuration for supervised fine-tuning of Qwen."""
@@ -66,4 +76,26 @@ class CrawlerConfig:
     cache_dir: Path = Path("storage/crawler_cache")
 
 
-__all__ = ["TrainConfig", "RAGConfig", "CrawlerConfig"]
+MODEL_OPTIONS: List[ModelOption] = [
+    ModelOption(
+        key="qwen3-omni-30b",
+        label="Qwen3-Omni-30B-A3B-Instruct (multimodal)",
+        model_name="Qwen/Qwen3-Omni-30B-A3B-Instruct",
+        multimodal=True,
+    ),
+    ModelOption(
+        key="gpt-oss-120b",
+        label="gpt-oss-120b (text-only)",
+        model_name="Qwen/gpt-oss-120b",
+        multimodal=False,
+    ),
+]
+
+
+__all__ = [
+    "TrainConfig",
+    "RAGConfig",
+    "CrawlerConfig",
+    "ModelOption",
+    "MODEL_OPTIONS",
+]
