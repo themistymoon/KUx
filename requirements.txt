@@ -13,4 +13,4 @@ transformers>=4.40.0
 trl>=0.9.6
 beautifulsoup4>=4.12.3
 trafilatura>=1.7.0
-requests==2.32.4
+requests>=2.31.0
