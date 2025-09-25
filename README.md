@@ -25,7 +25,7 @@ KUx is a retrieval-augmented, Kasetsart University–focused assistant built on 
 1. **Provision the runtime** – open a fresh Colab notebook, switch the hardware accelerator to **GPU (A100 80GB)**, and optionally enable High-RAM.
 2. **Clone and install:**
    ```bash
-   !git clone https://github.com/<your-account>/KUx.git
+   !git clone https://github.com/themistymoon/KUx.git 
    %cd KUx
    !pip install -U pip
    !pip install -r requirements.txt
