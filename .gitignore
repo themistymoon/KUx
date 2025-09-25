@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.swp
+.cache/
+outputs/
+!outputs/.gitkeep
+storage/
+!storage/.gitkeep
+data/
+!data/.gitkeep
+.ipynb_checkpoints/
+.env
